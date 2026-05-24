@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import signal
+
+import os
+import signal
+
 
 class Process:
     """A single OS process with chainable actions."""
@@ -20,11 +26,11 @@ class Process:
 
     def kill(self) -> None:
         """Send SIGKILL to the process."""
-        raise NotImplementedError
+        os.kill(self.pid, signal.SIGKILL)
 
     def terminate(self) -> None:
-        """Send SIGTERM to the process."""
-        raise NotImplementedError
+        """Send SIGTERM to the process (polite shutdown request)."""
+        os.kill(self.pid, signal.SIGTERM)
 
     def details(self) -> dict:
         """Return process attributes as a plain dict."""
