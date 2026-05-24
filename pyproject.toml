@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "serverkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "OOP Linux operations SDK with workflows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,16 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-mock>=3.0.0",
+]
+rich = [
+    "rich>=13.0.0",
+]
+docker = [
+    "docker>=7.0.0",
+]
+all = [
+    "serverkit[dev,rich,docker]",
 ]
 
 [project.scripts]
@@ -29,3 +39,6 @@ include = ["serverkit*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: tests that touch the live OS",
+]
