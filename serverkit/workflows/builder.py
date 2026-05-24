@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from serverkit.workflows.steps import ProcessFilterStep, SortStep, SummaryStep
 from serverkit.workflows.workflow import Workflow
 
 
@@ -17,16 +18,20 @@ class WorkflowBuilder:
         return self
 
     def memory_above(self, mb: float) -> WorkflowBuilder:
-        raise NotImplementedError
+        self._workflow.add_step(ProcessFilterStep(memory_above=mb))
+        return self
 
     def sort_by_memory(self) -> WorkflowBuilder:
-        raise NotImplementedError
+        self._workflow.add_step(SortStep(field="memory"))
+        return self
 
     def summarize(self) -> WorkflowBuilder:
-        raise NotImplementedError
+        self._workflow.add_step(SummaryStep())
+        return self
 
     def save(self) -> Workflow:
-        raise NotImplementedError
+        self._workflow.save()
+        return self._workflow
 
     def build(self) -> Workflow:
         return self._workflow
