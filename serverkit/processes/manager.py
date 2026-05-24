@@ -12,25 +12,32 @@ class ProcessCollection:
         self.data: list[Process] = list(data) if data else []
 
     def named(self, name: str) -> ProcessCollection:
-        raise NotImplementedError
+        needle = name.lower()
+        self.data = [p for p in self.data if needle in p.name.lower()]
+        return self
 
     def memory_above(self, mb: float) -> ProcessCollection:
-        raise NotImplementedError
+        self.data = [p for p in self.data if p.memory_mb > mb]
+        return self
 
     def cpu_above(self, percent: float) -> ProcessCollection:
-        raise NotImplementedError
+        self.data = [p for p in self.data if p.cpu_percent > percent]
+        return self
 
     def sort_by_memory(self) -> ProcessCollection:
-        raise NotImplementedError
+        self.data = sorted(self.data, key=lambda p: p.memory_mb, reverse=True)
+        return self
 
     def sort_by_cpu(self) -> ProcessCollection:
-        raise NotImplementedError
+        self.data = sorted(self.data, key=lambda p: p.cpu_percent, reverse=True)
+        return self
 
     def all(self) -> list[Process]:
         return self.data
 
     def summarize(self) -> str:
-        raise NotImplementedError
+        lines = [f"{p.name}: {p.memory_mb:.1f} MB" for p in self.data[:10]]
+        return "\n".join(lines)
 
     def __iter__(self):
         return iter(self.data)
