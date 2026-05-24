@@ -12,14 +12,20 @@ class ProcessFactory:
 
     @staticmethod
     def create(proc: psutil.Process) -> Process | None:
-        """Build a Process from a psutil.Process, or None if inaccessible."""
         try:
             with proc.oneshot():
+                username = None
+                try:
+                    username = proc.username()
+                except (psutil.AccessDenied, KeyError):
+                    pass
                 return Process(
                     pid=proc.pid,
                     name=proc.name(),
                     memory_mb=proc.memory_info().rss / 1024 / 1024,
                     cpu_percent=proc.cpu_percent(),
+                    ppid=proc.ppid(),
+                    username=username,
                 )
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return None
