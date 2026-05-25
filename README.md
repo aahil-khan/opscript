@@ -33,10 +33,50 @@ server.cron().suspicious_only().all()
 server.users().logged_in().summarize()
 server.env().keys_matching("PATH").all()
 server.docker().containers().running().summarize()  # needs [docker] extra
+server.containers().running().summarize()           # alias for docker().containers()
+
+server.services().active().summarize()
+server.service("nginx").restart()
+
+server.disk().largest_files("/home", limit=10).display()
+server.import_workflow("nginx_health_check")
+server.run("nginx_health_check")
 
 server.workflow("audit").processes().memory_above(1000).summarize().save()
 server.run("audit", dry_run=True)
 ```
+
+## Future extensions (v0.3)
+
+Bundled workflow catalog, high-level services API, and SSH remote facade:
+
+```python
+from serverkit import Server
+
+# Catalog templates (no filesystem path needed)
+Server().import_workflow("memory_audit")
+
+# Remote host (requires pip install serverkit[remote])
+with Server.connect("vm1.example", user="deploy", key_path="~/.ssh/id_ed25519") as remote:
+    print(remote.processes().memory_above(200).summarize())
+    print(remote.memory().summarize())
+    remote.service("nginx").status()
+    remote.run("memory_audit")  # workflow steps use remote processes/logs
+```
+
+Configure SSH defaults in `~/.serverkit/config.json`:
+
+```json
+{
+  "remote": {
+    "default_user": "deploy",
+    "key_path": "/home/you/.ssh/id_ed25519",
+    "port": 22
+  }
+}
+```
+
+See `examples/import_catalog_workflow.py` and `examples/remote_audit.py`.
 
 ## Setup
 
@@ -48,6 +88,7 @@ source .venv/bin/activate
 pip install -e ".[dev]"           # core + pytest
 pip install -e ".[rich]"          # table output
 pip install -e ".[docker]"        # container support
+pip install -e ".[remote]"        # SSH remote Server.connect()
 pip install -e ".[all]"           # everything
 pytest                              # offline unit tests (default)
 pytest -m integration               # live OS / psutil tests
@@ -70,7 +111,7 @@ Config: `~/.serverkit/config.json` (executor, rich output, Ollama model defaults
 
 - **Eager execution** — filters run immediately; `.all()` / `.summarize()` are terminal.
 - **Workflow JSON** — `schema_version: 2` under `~/.serverkit/workflows/`.
-- **Optional deps** — `rich`, `docker` fail with `OptionalDependencyError` if missing.
+- **Optional deps** — `rich`, `docker`, `remote` (paramiko) fail with `OptionalDependencyError` if missing.
 
 ## Documentation
 
