@@ -12,6 +12,7 @@ from serverkit.memory.manager import MemoryManager
 from serverkit.network.manager import NetworkManager
 from serverkit.ports.manager import PortManager
 from serverkit.processes.manager import ProcessManager
+from serverkit.services.manager import ServicesManager
 from serverkit.systemctl.manager import SystemctlManager
 from serverkit.users.manager import UsersManager
 from serverkit.workflows.manager import WorkflowManager
@@ -30,6 +31,7 @@ class Server:
         self._network_manager = NetworkManager()
         self._port_manager = PortManager()
         self._systemctl_manager = SystemctlManager()
+        self._services_manager = ServicesManager(self._systemctl_manager)
         self._cron_manager = CronManager()
         self._users_manager = UsersManager()
         self._env_manager = EnvManager()
@@ -63,6 +65,12 @@ class Server:
 
     def systemctl(self):
         return self._systemctl_manager
+
+    def services(self):
+        return self._services_manager.list()
+
+    def service(self, name: str):
+        return self._services_manager.get(name)
 
     def cron(self):
         return self._cron_manager.all()
