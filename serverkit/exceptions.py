@@ -43,3 +43,7 @@ class OptionalDependencyError(ServerKitError):
 
 class RemoteConnectionError(ServerKitError):
     """Raised when SSH connect or remote command execution fails."""
+
+
+class ExternalCommandNotFound(ServerKitError):
+    """A required host binary (e.g. systemctl, who) is missing — typical on non-Linux."""

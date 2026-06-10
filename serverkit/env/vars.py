@@ -7,7 +7,10 @@ from serverkit.core.display import display_table, resolve_use_rich
 
 class EnvSnapshot:
     def __init__(self, data: dict[str, str] | None = None) -> None:
-        self._data = dict(data or os.environ)
+        if data is not None:
+            self._data = dict(data)
+        else:
+            self._data = dict(os.environ)
 
     def get(self, key: str, default: str | None = None) -> str | None:
         return self._data.get(key, default)
@@ -16,11 +19,18 @@ class EnvSnapshot:
         return self._data.get("PATH", "").split(os.pathsep)
 
     def contains(self, substring: str) -> EnvSnapshot:
-        filtered = {k: v for k, v in self._data.items() if substring in v}
+        """Filter to rows whose *value* contains ``substring`` (case-sensitive)."""
+        needle = (substring or "").strip()
+        if not needle:
+            return EnvSnapshot({})
+        filtered = {k: v for k, v in self._data.items() if needle in v}
         return EnvSnapshot(filtered)
 
     def keys_matching(self, pattern: str) -> EnvSnapshot:
-        needle = pattern.lower()
+        """Filter to variables whose *name* contains ``pattern`` (case-insensitive)."""
+        needle = (pattern or "").strip().lower()
+        if not needle:
+            return EnvSnapshot({})
         filtered = {k: v for k, v in self._data.items() if needle in k.lower()}
         return EnvSnapshot(filtered)
 

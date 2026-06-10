@@ -62,7 +62,6 @@ class Workflow:
             version_path = os.path.join(versions_dir, f"v_{stamp}.json")
             with open(version_path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
-        print(f"Workflow saved: {latest}")
 
     def to_dict(self) -> dict:
         return {

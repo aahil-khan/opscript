@@ -5,6 +5,7 @@ from pathlib import Path
 
 from serverkit.core.collection import FluentCollection
 from serverkit.core.display import display_table, export_table, resolve_use_rich
+from serverkit.exceptions import ExternalCommandNotFound
 from serverkit.users.session import FailedLogin, UserSession
 
 
@@ -43,7 +44,16 @@ class FailedLoginCollection(FluentCollection[FailedLogin]):
 
 class UsersManager:
     def logged_in(self) -> SessionCollection:
-        out = subprocess.run(["who"], capture_output=True, text=True, check=False).stdout
+        try:
+            proc = subprocess.run(
+                ["who"], capture_output=True, text=True, check=False
+            )
+        except FileNotFoundError as exc:
+            raise ExternalCommandNotFound(
+                "The `who` command was not found. users.logged_in() expects a Unix-like "
+                "login table (not available on typical Windows shells)."
+            ) from exc
+        out = proc.stdout
         sessions: list[UserSession] = []
         for line in out.strip().splitlines():
             parts = line.split()

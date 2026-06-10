@@ -2,11 +2,28 @@
 
 from __future__ import annotations
 
+import shlex
+
 from serverkit.config import Config
+from serverkit.cron.manager import CronCollection
+from serverkit.disk.manager import DiskCollection
+from serverkit.docker.manager import ContainerCollection
+from serverkit.env.vars import EnvSnapshot
 from serverkit.logs.logfile import LogFile
 from serverkit.memory.snapshot import MemorySnapshot
 from serverkit.processes.manager import ProcessCollection
 from serverkit.remote.connection import SSHConnection
+from serverkit.remote.facade_managers import (
+    RemoteDockerManager,
+    RemoteNetworkManager,
+    RemoteUsersManager,
+)
+from serverkit.remote.host_parsers import (
+    cron_jobs_from_remote_text,
+    disk_partitions_from_df,
+    env_dict_from_printenv,
+    ports_from_ss,
+)
 from serverkit.remote.parsers import (
     PSUTIL_JSON_SCRIPT,
     PSUTIL_PROBE,
@@ -16,6 +33,7 @@ from serverkit.remote.parsers import (
     processes_from_psutil_json,
 )
 from serverkit.remote.systemctl import RemoteSystemctlManager
+from serverkit.ports.manager import PortCollection
 from serverkit.services.manager import ServicesManager
 from serverkit.workflows.manager import WorkflowManager
 
@@ -30,6 +48,9 @@ class RemoteServer:
         self._services_manager = ServicesManager(self._systemctl)
         self._workflow_manager = WorkflowManager()
         self._cached_psutil_payload: str | None = None
+        self._network = RemoteNetworkManager(connection)
+        self._users = RemoteUsersManager(connection)
+        self._docker = RemoteDockerManager(connection)
 
     @property
     def host(self) -> str:
@@ -68,11 +89,51 @@ class RemoteServer:
         out = self._conn.run("free -m")
         return MemorySnapshot(memory_from_free_m(out))
 
+    def disk(self) -> DiskCollection:
+        out = self._conn.run("df -P 2>/dev/null || true", check=False)
+        return DiskCollection(disk_partitions_from_df(out))
+
+    def network(self) -> RemoteNetworkManager:
+        return self._network
+
+    def ports(self) -> PortCollection:
+        out = self._conn.run("ss -tulpn 2>/dev/null | head -n 800 || true", check=False)
+        return PortCollection(ports_from_ss(out))
+
+    def systemctl(self) -> RemoteSystemctlManager:
+        return self._systemctl
+
     def services(self):
         return self._services_manager.list()
 
     def service(self, name: str):
         return self._services_manager.get(name)
+
+    def cron(self) -> CronCollection:
+        inner = (
+            'for p in /etc/crontab; do test -r "$p" && echo "# FILE$p" && cat "$p"; done; '
+            'for p in /etc/cron.d/*; do test -r "$p" && echo "# FILE$p" && cat "$p"; done'
+        )
+        blob = self._conn.run("bash -lc " + shlex.quote(inner), check=False)
+        return CronCollection(cron_jobs_from_remote_text(blob))
+
+    def users(self) -> RemoteUsersManager:
+        return self._users
+
+    def env(self) -> EnvSnapshot:
+        out = self._conn.run("printenv 2>/dev/null || env 2>/dev/null || true", check=False)
+        return EnvSnapshot(env_dict_from_printenv(out))
+
+    def docker(self) -> RemoteDockerManager:
+        return self._docker
+
+    def containers(self) -> ContainerCollection:
+        return self.docker().containers()
+
+    def ask(self, query: str) -> str:
+        from serverkit.ai.analyzer import Analyzer
+
+        return Analyzer(self).ask(query)
 
     def run(self, name: str, *, dry_run: bool = False, executor: str | None = None):
         return self._workflow_manager.run(

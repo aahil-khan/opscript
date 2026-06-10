@@ -179,7 +179,7 @@ Suggested scope for v1 REPL:
    - `run <workflow> [--dry-run]`
    - `import <catalog_name>`
    - `catalog` → `list_catalog()`
-   - `connect <host> [--user] [--key]`
+   - `connect <host> [--user] [--key] [--port] [--password] [--timeout] [--no-agent] [--no-look-for-keys]`
    - `help` / tab-complete on `server.processes().`
 4. Always `print(x.summarize())` and `print(x.display())`, not bare `summarize()` in interactive mode.
 5. Entry point already wired: `serverkit` → `serverkit.shell.repl:main` in `pyproject.toml`.

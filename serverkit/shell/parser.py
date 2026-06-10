@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import shlex
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from serverkit.exceptions import (
@@ -22,6 +25,7 @@ if TYPE_CHECKING:
 HELP_TEXT = """ServerKit shell — commands (see docs/DEV2_CONTRACTS.md)
 
   help                          Show this help
+  clr | clear                   Clear the terminal screen (Windows: cls; Unix: clear)
   exit                          Leave the shell
 
 Processes (chain uses active target: local or connected remote):
@@ -35,11 +39,18 @@ Processes (chain uses active target: local or connected remote):
 Logs:
   logs("path").errors()         Summarize ERROR lines
   logs("path").warnings()
+  logs("path").contains("text") Substring filter (SDK LogFile.contains)
+  logs("path").match("regex")   Regex filter (SDK LogFile.match)
   logs("path").summarize()
   logs("path").tail(N)
+  logs("path").since("2024-06-01T12:00:00")   # filter by parsed line timestamps
+  logs("path").until("2024-06-02T00:00:00")
+  logs("path").json_lines()         # JSON array (terminal)
+  logs("path").error_rate()         # or .error_rate(10) window minutes (terminal)
 
 Memory:
   memory                        RAM / swap summary
+  memory.json                   Same snapshot as JSON (SDK MemorySnapshot.to_dict)
 
 Workflows:
   workflow create NAME          Interactive builder (local save)
@@ -49,8 +60,37 @@ Workflows:
   import NAME                   Import catalog template by name
   run NAME [--dry-run]          Run saved workflow
 
+Disk / network / ports / systemd / cron / users / env / Docker (local or after connect):
+  disk | disk.usage_above(80).summarize()
+  network.interfaces() | network.connections().listening().display()
+  ports | ports.listening().summarize()
+  systemctl.list_units().active().summarize()
+  services | services().named("nginx").summarize()
+  service UNIT status|start|stop|restart|is_active
+  cron | cron.suspicious_only().display()
+  users.logged_in().summarize() | users.failed_logins().display()
+  env | env.keys_matching("PATH").display()   # substring of *variable name*
+  env.contains("OneDrive")                    # substring in *values* (paths, etc.)
+  docker() | docker().containers().running().summarize()
+  docker.logs("NAME"[, N])      # local: docker-py; remote: docker CLI over SSH
+  docker.stats("NAME")
+  containers()                # alias of docker().containers()
+
+Processes (fluent root, same as SDK processes()):
+  processes() | processes().for_user("u").display()
+  processes().group_by_name().summarize()   # grouped apps (terminal)
+  processes().memory_above(N).summarize()   … any ProcessCollection chain
+
+Systemctl (raw unit names; same subprocess as SDK SystemctlManager):
+  systemctl.status("UNIT")
+  systemctl.start("UNIT") | systemctl.stop("UNIT") | systemctl.restart("UNIT")
+
+Workflow one-liner (local only; must end with .save()):
+  workflow("NAME").processes().memory_above(500).summarize().save()
+
 Remote (requires: pip install serverkit[remote]):
-  connect HOST [--user U] [--key PATH] [--port N]
+  connect HOST [--user U] [--key PATH] [--port N] [--password P]
+    [--timeout SEC] [--no-agent] [--no-look-for-keys]
   disconnect
 
 AI (optional: pip install serverkit[ai]; Ollama running, model in config ollama.model):
@@ -93,6 +133,25 @@ def _terminal_log_summary(state: "ReplState", path: str) -> str:
     return lf.summarize()
 
 
+def _parse_datetime_arg(s: str) -> datetime:
+    """Parse REPL datetime strings for LogFile.since / until."""
+    t = s.strip()
+    if t.endswith("Z") and "T" in t:
+        t = t[:-1]
+    try:
+        return datetime.fromisoformat(t)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(t, fmt)
+        except ValueError:
+            continue
+    raise ValueError(
+        f"Could not parse datetime {s!r}; try ISO format e.g. 2024-06-01T12:00:00"
+    )
+
+
 def _apply_log_chain(state: "ReplState", path: str, chain: str) -> str:
     """chain examples: .errors(), .warnings(), .tail(20), .summarize()."""
     lf = state.active.logs(path)
@@ -107,6 +166,61 @@ def _apply_log_chain(state: "ReplState", path: str, chain: str) -> str:
         elif tail.startswith(".warnings()"):
             lf = lf.warnings()
             tail = tail[len(".warnings()") :]
+        elif tail.startswith(".contains(") or tail.startswith(".log_contains("):
+            m = re.match(r"^\.(?:contains|log_contains)\(\s*(['\"])(.*?)\1\s*\)", tail, re.DOTALL)
+            if not m:
+                return "Malformed .contains(\"…\") or .log_contains(\"…\")"
+            lf = lf.contains(m.group(2))
+            tail = tail[m.end() :]
+        elif tail.startswith(".match("):
+            m = re.match(r"^\.match\(\s*(['\"])(.*?)\1\s*\)", tail, re.DOTALL)
+            if not m:
+                return "Malformed .match(\"…\")"
+            lf = lf.match(m.group(2))
+            tail = tail[m.end() :]
+        elif tail.startswith(".since("):
+            m = re.match(r"^\.since\(\s*(['\"])(.*?)\1\s*\)", tail, re.DOTALL)
+            if not m:
+                return "Malformed .since(\"ISO-DATETIME\")"
+            try:
+                dt = _parse_datetime_arg(m.group(2))
+            except ValueError as exc:
+                return str(exc)
+            lf = lf.since(dt)
+            tail = tail[m.end() :]
+        elif tail.startswith(".until("):
+            m = re.match(r"^\.until\(\s*(['\"])(.*?)\1\s*\)", tail, re.DOTALL)
+            if not m:
+                return "Malformed .until(\"ISO-DATETIME\")"
+            try:
+                dt = _parse_datetime_arg(m.group(2))
+            except ValueError as exc:
+                return str(exc)
+            lf = lf.until(dt)
+            tail = tail[m.end() :]
+        elif tail.startswith(".json_lines()"):
+            tail = tail[len(".json_lines()") :]
+            if tail.strip().startswith("."):
+                return "Cannot chain after .json_lines()"
+            data = lf.json_lines()
+            return json.dumps(data, indent=2, default=str)[:100_000]
+        elif tail.startswith(".error_rate"):
+            m = re.match(r"^\.error_rate\(\s*([^)]*)\s*\)", tail)
+            if not m:
+                return "Malformed .error_rate( [minutes] )"
+            inner = m.group(1).strip()
+            try:
+                win = float(inner) if inner else 5.0
+            except ValueError:
+                return "error_rate: minutes must be a number"
+            rep = lf.error_rate(win)
+            tail = tail[m.end() :]
+            if tail.strip():
+                return "Cannot chain after .error_rate()"
+            return (
+                f"errors={rep.count} | window_min={rep.window_minutes} | "
+                f"errors_per_minute={rep.rate_per_minute:.4f}"
+            )
         elif tail.startswith(".summarize()"):
             return lf.summarize()
         elif tail.startswith(".summarise()"):
@@ -160,10 +274,12 @@ def apply_step_command(builder: WorkflowBuilder, step: str) -> str | None:
             builder.tail(int(parts[1]))
         elif cmd == "summarize":
             builder.summarize()
+        elif cmd == "export" and len(parts) >= 2:
+            builder.export(parts[1])
         else:
             return (
                 f"Unknown step {cmd!r}. Try: processes, logs PATH, memory_above N, "
-                "cpu_above N, named NAME, sort_by_memory, errors, warnings, tail N, summarize"
+                "cpu_above N, named NAME, sort_by_memory, errors, warnings, tail N, summarize, export PATH"
             )
     except Exception as exc:  # builder validation
         return f"Step failed: {exc}"
@@ -175,7 +291,8 @@ def run_workflow_builder(name: str, state: "ReplState") -> str:
     print("Enter steps (see help). Type save when done, cancel to abort.")
     print(
         "Examples: processes | memory_above 500 | sort_by_memory | summarize\n"
-        "          logs /var/log/syslog | errors | tail 20 | summarize"
+        "          logs /var/log/syslog | errors | tail 20 | summarize\n"
+        "          export /tmp/report.txt"
     )
     builder = state.server.workflow(name)
     while True:
@@ -195,13 +312,19 @@ def run_workflow_builder(name: str, state: "ReplState") -> str:
             print(err)
 
 
-def _parse_connect_args(rest: list[str]) -> tuple[str, str | None, str | None, int]:
+def _parse_connect_args(
+    rest: list[str],
+) -> tuple[str, str | None, str | None, int, str | None, int | None, bool, bool]:
     if not rest:
         raise ValueError("connect: host required")
     host = rest[0]
     user = None
     key_path = None
+    password = None
     port = 22
+    timeout: int | None = None
+    allow_agent = True
+    look_for_keys = True
     i = 1
     while i < len(rest):
         if rest[i] == "--user" and i + 1 < len(rest):
@@ -210,12 +333,24 @@ def _parse_connect_args(rest: list[str]) -> tuple[str, str | None, str | None, i
         elif rest[i] == "--key" and i + 1 < len(rest):
             key_path = rest[i + 1]
             i += 2
+        elif rest[i] == "--password" and i + 1 < len(rest):
+            password = rest[i + 1]
+            i += 2
         elif rest[i] == "--port" and i + 1 < len(rest):
             port = int(rest[i + 1])
             i += 2
+        elif rest[i] == "--timeout" and i + 1 < len(rest):
+            timeout = int(rest[i + 1])
+            i += 2
+        elif rest[i] == "--no-agent":
+            allow_agent = False
+            i += 1
+        elif rest[i] == "--no-look-for-keys":
+            look_for_keys = False
+            i += 1
         else:
             raise ValueError(f"connect: unknown argument {rest[i]!r}")
-    return host, user, key_path, port
+    return host, user, key_path, port, password, timeout, allow_agent, look_for_keys
 
 
 def parse_input(text: str, state: "ReplState") -> str | None:
@@ -227,6 +362,10 @@ def parse_input(text: str, state: "ReplState") -> str | None:
     # --- Meta / contracts (DEV2_CONTRACTS) ---
     if text == "help":
         return HELP_TEXT
+
+    if text.lower() in ("clr", "clear"):
+        os.system("cls" if os.name == "nt" else "clear")
+        return None
 
     if text.startswith("ask "):
         query = text[4:].strip()
@@ -274,10 +413,20 @@ def parse_input(text: str, state: "ReplState") -> str | None:
             from serverkit import Server
 
             rest = shlex.split(text[len("connect ") :])
-            host, user, key_path, port = _parse_connect_args(rest)
+            host, user, key_path, port, password, timeout, allow_agent, look_for_keys = (
+                _parse_connect_args(rest)
+            )
             state.close_remote()
             state.remote = Server.connect(
-                host, user=user, key_path=key_path, port=port, config=state.server._config
+                host,
+                user=user,
+                key_path=key_path,
+                port=port,
+                password=password,
+                config=state.server._config,
+                timeout=timeout,
+                allow_agent=allow_agent,
+                look_for_keys=look_for_keys,
             )
             return f"Connected to {host!r} as {state.remote.user!r} (remote is active)."
         except OptionalDependencyError as exc:
@@ -297,6 +446,10 @@ def parse_input(text: str, state: "ReplState") -> str | None:
     if text == "memory":
         snap = state.active.memory()
         return snap.summarize() + "\n\n" + snap.display()
+
+    if text == "memory.json":
+        snap = state.active.memory()
+        return json.dumps(snap.to_dict(), indent=2)
 
     # --- PDF: processes ---
     if text == "processes.all()":
@@ -365,6 +518,12 @@ def parse_input(text: str, state: "ReplState") -> str | None:
             return "Usage: workflow run NAME"
         result = state.active.run(name)
         return _format_workflow_result(result)
+
+    from serverkit.shell.chains import try_extended_sdk_commands
+
+    ext = try_extended_sdk_commands(text, state)
+    if ext is not None:
+        return ext
 
     return f"Unknown command: {text}\nType help for a list of commands."
 

@@ -17,7 +17,7 @@ Think **typed objects and workflows** instead of re-learning `ps` flags and one-
 | **`Server` facade** — processes, logs, memory, disk, network, ports, systemd, cron, users, env, Docker | Shipped |
 | **Workflow engine** — JSON `schema_version: 2`, catalog `import_workflow`, `run`, fluent `WorkflowBuilder` | Shipped |
 | **`Server.connect` → `RemoteServer`** (SSH subset for workflows / processes / logs / memory / services) | Shipped (`[remote]`) |
-| **Interactive REPL** — `serverkit` CLI, parser, static completions, `connect` / `disconnect` | Shipped |
+| **Interactive REPL** — `serverkit` CLI, parser, completions, `connect` / `disconnect`, fluent chains (logs/processes/docker/systemd/…), remote parity for host metrics over SSH | Shipped — see [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) §5.0 and [`docs/REPL_VERIFICATION.md`](docs/REPL_VERIFICATION.md) |
 | **AI layer** — `OllamaClient`, `Analyzer`, `Server.ask()`, REPL `ask …`, defensive JSON + deterministic CPU/memory shortcuts | Shipped (`[ai]`) |
 | **Tests** — unit tests for shell parser, AI, workflows; integration marker for live OS | Shipped |
 
@@ -243,7 +243,7 @@ pytest -m integration           # live OS / psutil (where applicable)
 
 | Document | Description |
 |----------|-------------|
-| [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | **How ServerKit works** and **how to use** it (SDK, REPL, workflows, AI, remote, config) |
+| [`docs/REPL_VERIFICATION.md`](docs/REPL_VERIFICATION.md) | Copy-paste **local + remote** REPL checks after changes |
 | [`docs/DEV2_CONTRACTS.md`](docs/DEV2_CONTRACTS.md) | Stable integration API for shell + AI |
 | [`docs/AI_TESTING.md`](docs/AI_TESTING.md) | AI extras, automated tests, manual Ollama checks |
 | `docs/serverkit_main.pdf` | Full architecture (PDF) |

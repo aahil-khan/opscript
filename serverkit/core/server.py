@@ -31,6 +31,9 @@ class Server:
         key_path: str | None = None,
         password: str | None = None,
         config: Config | None = None,
+        timeout: int | None = None,
+        allow_agent: bool = True,
+        look_for_keys: bool = True,
     ):
         """Open an SSH session and return a RemoteServer facade."""
         from serverkit.remote.connection import SSHConnection
@@ -44,6 +47,9 @@ class Server:
             key_path=key_path,
             password=password,
             config=cfg,
+            timeout=timeout,
+            allow_agent=allow_agent,
+            look_for_keys=look_for_keys,
         )
         return RemoteServer(conn, config=cfg)
 

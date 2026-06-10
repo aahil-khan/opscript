@@ -36,20 +36,24 @@ class SSHConnection:
         key_path: str | None = None,
         password: str | None = None,
         config: Config | None = None,
+        timeout: int | None = None,
+        allow_agent: bool = True,
+        look_for_keys: bool = True,
     ) -> SSHConnection:
         paramiko = _paramiko()
         cfg = config or Config.load()
         user = user or cfg.get("remote", "default_user") or _default_ssh_user()
         key_path = key_path or cfg.get("remote", "key_path")
         port = int(cfg.get("remote", "port", default=port) or port)
-
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         connect_kwargs: dict[str, Any] = {
             "hostname": host,
             "port": port,
             "username": user,
-            "timeout": 30,
+            "timeout": int(timeout or cfg.get("remote", "timeout", default=30) or 30),
+            "allow_agent": allow_agent,
+            "look_for_keys": look_for_keys,
         }
         if password:
             connect_kwargs["password"] = password

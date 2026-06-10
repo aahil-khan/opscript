@@ -153,7 +153,27 @@ print(server.ask("list processes with cpu above 10 percent"))
 
 ## 5. How to use — `serverkit` REPL
 
-Start:
+### 5.0 REPL vs full SDK (what is wired today)
+
+The REPL is a **thin command front-end** (pattern-matched strings → SDK calls). It still does **not** expose every `Server` method as its own keyword, but **fluent chains** now cover most local `Server` entry points plus a **one-line** `workflow("name").….save()` builder. Use **`from serverkit import Server`** in scripts for arbitrary composition and types the REPL does not parse.
+
+| `Server` API (local) | In REPL today? | Notes |
+|----------------------|----------------|--------|
+| `processes()` | **Yes** | Shorthand: `processes.all()`, `processes.memory_above(N)`, …; **`processes()`** + any **`ProcessCollection`** fluent chain (e.g. **`processes().for_user("u").display()`**) |
+| `logs(path)` | **Partial** | `logs("path").errors()` / `.warnings()` / `.contains()` / `.log_contains()` / `.match()` / `.summarize()` / `.tail` / `.display` / `.all` |
+| `memory()` | **Yes** | `memory` (summary + table); **`memory.json`** → `MemorySnapshot.to_dict()` as JSON |
+| `run`, `import_workflow`, workflows | **Yes** | `run`, `import`, `catalog`, `workflow list` / `create` / `run`; **one-liner** `workflow("NAME").….save()` (local only); interactive steps include **`export PATH`** |
+| `connect` / remote `active` | **Yes** | `connect … [--password P]` among other flags; **active** follows `connect` / `disconnect` |
+| `ask` / AI | **Yes** | `ask …` (requires `[ai]` + Ollama) |
+| `disk()`, `network()`, `ports()` | **Yes** (local) | Fluent `.usage_above` / `.mount_contains` / `network.interfaces()` / `network.connections()` / `ports.listening()` etc.; **not** on `RemoteServer` |
+| `systemctl()`, `services()`, `service()` | **Yes** | `systemctl.list_units()…`, **`systemctl.status|start|stop|restart("unit")`**, `services()…`, **`service UNIT …`** |
+| `docker()`, `containers()` | **Yes** (local) | **`docker.containers()…`** / **`containers()…`**, **`docker.logs("name"[, tail])`**, **`docker.stats("name")`**; needs `[docker]`; **not** on remote |
+| `cron()`, `users()`, `env()` | **Yes** (local) | `cron…`, `users.logged_in()…`, `env…`; **not** on remote |
+| `workflow()` fluent builder (one-liner) | **Yes** | `workflow("NAME").processes().….save()` in addition to interactive `workflow create` |
+
+**`RemoteServer`** (SSH) implements the same **REPL-facing** entry points as local **`Server`** where data can be obtained over SSH: **processes, logs, memory, disk, network, ports, systemctl, services, service, cron, users, env, docker/containers, run, ask**. Parsing uses Linux tools on the host (`df`, `ss`, `printenv`, `docker` CLI, etc.); quality depends on the remote OS and installed binaries.
+
+**Bottom line:** use **`serverkit`** for quick checks on **local or connected** targets; use **Python** for anything not covered by the string parser. See **[`docs/REPL_VERIFICATION.md`](REPL_VERIFICATION.md)** for copy-paste checks.
 
 ```bash
 serverkit
@@ -175,8 +195,9 @@ serverkit
 | `processes.memory_above(500)` | Filter by RSS (MB) |
 | `processes.cpu_above(10)` | Filter by CPU % |
 | `processes.named("python")` | Name substring filter |
-| `processes.sort_by_memory().all()` | Sort then list |
-| `memory` | RAM / swap snapshot + table |
+| `processes().…` | Any **`ProcessCollection`** chain (e.g. **`processes().for_user("www-data").display()`**) |
+| `memory` | RAM / swap summary + table |
+| `memory.json` | Same snapshot as JSON (`MemorySnapshot.to_dict()`) |
 
 ### 5.3 Logs
 
@@ -185,6 +206,8 @@ Use a **real path** on the target machine, double quotes:
 ```text
 logs("C:\Windows\Logs\DISM\dism.log").summarize()
 logs("C:\path\app.log").errors().tail(20)
+logs("C:\path\app.log").contains("timeout")
+logs("C:\path\app.log").match("ERROR|CRITICAL")
 ```
 
 ### 5.4 Workflows
@@ -196,12 +219,13 @@ logs("C:\path\app.log").errors().tail(20)
 | `workflow list` | List saved workflow names |
 | `run memory_audit` | Run on **active** target (`--dry-run` optional) |
 | `workflow create NAME` | Interactive step loop (`save` / `cancel`) — see `help` |
+| `workflow("NAME").processes().memory_above(500).summarize().save()` | **One-line** builder (same steps as interactive); **local only**; must end with `.save()` |
 
 ### 5.5 Remote
 
 | Command | Effect |
 |---------|--------|
-| `connect HOST --user U --key PATH [--port N]` | Open SSH; **active** becomes remote |
+| `connect HOST --user U --key PATH [--port N] [--password P]` | Open SSH; **active** becomes remote (**password** may appear in shell history — prefer keys) |
 | `disconnect` | Close SSH; **active** returns to local `Server` |
 
 ### 5.6 AI (`[ai]` + Ollama)
@@ -219,6 +243,32 @@ ask create a workflow to find high memory processes
 ```
 
 Plain English **without** the `ask ` prefix is **not** sent to the AI — it will be “unknown command.”
+
+### 5.7 Host resources (fluent chains)
+
+These follow the SDK’s fluent `.filter()….summarize()` / `.display()` / `.all()` style. Examples (see `help` for the full list):
+
+```text
+disk
+disk.usage_above(80).summarize()
+network.interfaces().display()
+ports.listening().summarize()
+systemctl.list_units().active().summarize()
+systemctl.status("nginx.service")
+docker.logs("myapp", 200)
+docker.stats("myapp")
+services().named("nginx").summarize()
+service nginx status
+cron.suspicious_only().display()
+users.logged_in().summarize()
+env.keys_matching("PATH").display()
+env.contains("OneDrive").display()
+docker.containers().running().summarize()
+containers().summarize()
+processes().sort_by_memory().display()
+```
+
+`service … start|stop|restart` runs real systemd actions — use with care. **`workflow("…").….save()`** requires a **local** Server (disconnect first). **`disk` / `network` / `ports` / `cron` / `users` / `env` / `containers`** are **not** available on **`RemoteServer`** after `connect`.
 
 ---
 
