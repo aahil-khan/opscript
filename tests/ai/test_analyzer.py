@@ -78,6 +78,116 @@ def test_analyzer_diagnose_branch():
     assert "python" in stub.prompts[0]
 
 
+def test_analyzer_deterministic_disk_skips_llm():
+    from serverkit.disk.manager import DiskCollection
+    from serverkit.disk.partition import Partition
+
+    srv = _server_mock()
+
+    def _disk():
+        return DiskCollection(
+            [
+                Partition(
+                    device="/dev/sda1",
+                    mountpoint="/",
+                    fstype="ext4",
+                    total_mb=1000,
+                    used_mb=850,
+                    percent=85.0,
+                ),
+                Partition(
+                    device="/dev/sdb1",
+                    mountpoint="/data",
+                    fstype="ext4",
+                    total_mb=2000,
+                    used_mb=200,
+                    percent=10.0,
+                ),
+            ]
+        )
+
+    srv.disk.side_effect = _disk
+    stub = _StubOllama("SHOULD_NOT_BE_USED")
+    a = Analyzer(srv, ollama=stub)
+    out = a.ask("show disks above 50 percent")
+    assert stub.prompts == []
+    assert "/" in out
+    assert "85" in out
+    assert "/data" not in out
+
+
+def test_analyzer_memory_intent_json():
+    from serverkit.memory.snapshot import MemorySnapshot
+
+    srv = _server_mock()
+    srv.memory.return_value = MemorySnapshot(
+        {
+            "total_mb": 8000,
+            "used_mb": 4000,
+            "available_mb": 4000,
+            "percent": 50.0,
+            "swap_total_mb": 1000,
+            "swap_used_mb": 0,
+            "swap_percent": 0.0,
+        }
+    )
+    stub = _StubOllama('{"resource": "memory"}')
+    a = Analyzer(srv, ollama=stub)
+    out = a.ask("memory footprint of this node for the report")
+    assert "50" in out or "4000" in out
+
+
+def test_analyzer_ports_listening_json():
+    from serverkit.ports.manager import PortCollection
+    from serverkit.ports.port import Port
+
+    srv = _server_mock()
+
+    def _ports():
+        return PortCollection(
+            [
+                Port(port=22, local_addr="0.0.0.0:22", status="LISTEN", pid=1, process_name="sshd"),
+                Port(port=443, local_addr="0.0.0.0:443", status="TIME_WAIT", pid=2, process_name=None),
+            ]
+        )
+
+    srv.ports.side_effect = _ports
+    stub = _StubOllama(
+        '{"resource": "ports", "filters": [{"action": "listening"}], "terminal": "summarize"}'
+    )
+    a = Analyzer(srv, ollama=stub)
+    out = a.ask("list ports for my audit")
+    assert "22" in out
+    assert "443" not in out
+
+
+def test_analyzer_list_workflows_no_llm():
+    srv = _server_mock()
+    stub = _StubOllama("SHOULD_NOT_BE_USED")
+    a = Analyzer(srv, ollama=stub)
+    out = a.ask("list workflows")
+    assert stub.prompts == []
+    assert "No workflows saved." in out or len(out.strip()) >= 1
+
+
+def test_analyzer_list_catalog_no_llm():
+    srv = _server_mock()
+    stub = _StubOllama("SHOULD_NOT_BE_USED")
+    a = Analyzer(srv, ollama=stub)
+    out = a.ask("list catalog")
+    assert stub.prompts == []
+    assert isinstance(out, str)
+    assert len(out) > 0
+
+
+def test_analyzer_workflows_intent_json():
+    srv = _server_mock()
+    stub = _StubOllama('{"resource": "workflows", "operation": "list_saved"}')
+    a = Analyzer(srv, ollama=stub)
+    out = a.ask("tell me about workflow inventory for my report")
+    assert isinstance(out, str)
+
+
 def test_analyzer_workflow_branch(monkeypatch, tmp_path):
     import serverkit.workflows.workflow as wf_mod
 

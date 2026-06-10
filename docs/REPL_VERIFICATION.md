@@ -74,6 +74,16 @@ memory
 memory.json
 ```
 
+### Ask — saved workflows / catalog (no Ollama JSON; same as `workflow list` / `catalog`)
+
+```text
+ask list workflows
+ask workflow list
+ask show saved workflows
+ask list catalog
+ask catalog
+```
+
 ### Systemd (Linux only; on Windows expect `ExternalCommandNotFound` / clear message)
 
 ```text
@@ -104,6 +114,8 @@ docker.logs("CONTAINER_NAME", 100)
 processes().memory_above(100).summarize()
 memory
 ask list processes with cpu above 5 percent
+ask list workflows
+ask list catalog
 disconnect
 ```
 

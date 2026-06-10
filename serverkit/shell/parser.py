@@ -22,13 +22,20 @@ from serverkit.workflows.manager import WorkflowManager
 if TYPE_CHECKING:
     from serverkit.shell.state import ReplState
 
-HELP_TEXT = """ServerKit shell — commands (see docs/DEV2_CONTRACTS.md)
+HELP_TEXT = """\
+--------------------------------------------------------------------------------
+  ServerKit shell — command reference
+  Further detail: docs/DEV2_CONTRACTS.md
+--------------------------------------------------------------------------------
 
+  Shell
+  -----
   help                          Show this help
-  clr | clear                   Clear the terminal screen (Windows: cls; Unix: clear)
+  clr | clear                   Clear the terminal (Windows: cls, Unix: clear)
   exit                          Leave the shell
 
-Processes (chain uses active target: local or connected remote):
+  Processes (classic forms; active target = local or remote after connect)
+  ---------------------------------------------------------------------------
   processes.all()
   processes.memory_above(N)
   processes.cpu_above(N)
@@ -36,67 +43,78 @@ Processes (chain uses active target: local or connected remote):
   processes.sort_by_memory().all()
   processes.sort_by_cpu().all()
 
-Logs:
-  logs("path").errors()         Summarize ERROR lines
+  Logs
+  ----
+  logs("path").errors()              Summarize ERROR lines
   logs("path").warnings()
-  logs("path").contains("text") Substring filter (SDK LogFile.contains)
-  logs("path").match("regex")   Regex filter (SDK LogFile.match)
+  logs("path").contains("text")      Substring filter (LogFile.contains)
+  logs("path").match("regex")        Regex filter (LogFile.match)
   logs("path").summarize()
   logs("path").tail(N)
-  logs("path").since("2024-06-01T12:00:00")   # filter by parsed line timestamps
+  logs("path").since("2024-06-01T12:00:00")   # parsed line timestamps
   logs("path").until("2024-06-02T00:00:00")
-  logs("path").json_lines()         # JSON array (terminal)
-  logs("path").error_rate()         # or .error_rate(10) window minutes (terminal)
+  logs("path").json_lines()             # JSON array (terminal)
+  logs("path").error_rate()             # or .error_rate(10) — window minutes
 
-Memory:
+  Memory
+  ------
   memory                        RAM / swap summary
-  memory.json                   Same snapshot as JSON (SDK MemorySnapshot.to_dict)
+  memory.json                   Same snapshot as JSON (MemorySnapshot.to_dict)
 
-Workflows:
+  Workflows (saved + catalog)
+  ---------------------------
   workflow create NAME          Interactive builder (local save)
-  workflow list                 Saved workflows in ~/.serverkit/workflows/
+  workflow list                 Saved under ~/.serverkit/workflows/
   workflow run NAME             Run on active target
   catalog                       Bundled template names
   import NAME                   Import catalog template by name
   run NAME [--dry-run]          Run saved workflow
 
-Disk / network / ports / systemd / cron / users / env / Docker (local or after connect):
-  disk | disk.usage_above(80).summarize()
-  network.interfaces() | network.connections().listening().display()
-  ports | ports.listening().summarize()
-  systemctl.list_units().active().summarize()
-  services | services().named("nginx").summarize()
-  service UNIT status|start|stop|restart|is_active
-  cron | cron.suspicious_only().display()
-  users.logged_in().summarize() | users.failed_logins().display()
-  env | env.keys_matching("PATH").display()   # substring of *variable name*
-  env.contains("OneDrive")                    # substring in *values* (paths, etc.)
-  docker() | docker().containers().running().summarize()
-  docker.logs("NAME"[, N])      # local: docker-py; remote: docker CLI over SSH
+  Host & services (local or after connect)
+  ----------------------------------------
+  disk                          disk() — partitions; chain e.g. .usage_above(80).summarize()
+  network.interfaces()          network.connections() — chain e.g. .listening().display()
+  ports                         ports() — chain e.g. .listening().summarize()
+  systemctl.list_units()        Chain e.g. .active().summarize()
+  services                      services() — chain e.g. .named("nginx").summarize()
+  service UNIT ACTION           ACTION: status | start | stop | restart | is_active
+  cron                          cron() — chain e.g. .suspicious_only().display()
+  users.logged_in()             users.failed_logins() — chain .summarize() / .display()
+  env                           env() — .keys_matching("PATH") matches variable *names*
+  env.contains("OneDrive")      Substring in *values* (paths, etc.)
+  docker()                      docker().containers().running().summarize()
+  docker.logs("NAME"[, N])      Local: docker-py; remote: docker over SSH
   docker.stats("NAME")
-  containers()                # alias of docker().containers()
+  containers()                  Alias of docker().containers()
 
-Processes (fluent root, same as SDK processes()):
-  processes() | processes().for_user("u").display()
-  processes().group_by_name().summarize()   # grouped apps (terminal)
-  processes().memory_above(N).summarize()   … any ProcessCollection chain
+  Processes (fluent root — same as SDK processes())
+  ---------------------------------------------------
+  processes()                   e.g. processes().for_user("u").display()
+  processes().group_by_name().summarize()     # grouped apps (terminal)
+  processes().memory_above(N).summarize()     # … any ProcessCollection chain
 
-Systemctl (raw unit names; same subprocess as SDK SystemctlManager):
+  Systemctl (raw unit names; same subprocess as SystemctlManager)
+  -----------------------------------------------------------------
   systemctl.status("UNIT")
-  systemctl.start("UNIT") | systemctl.stop("UNIT") | systemctl.restart("UNIT")
+  systemctl.start("UNIT")       systemctl.stop("UNIT")    systemctl.restart("UNIT")
 
-Workflow one-liner (local only; must end with .save()):
+  Workflow one-liner (local only; must end with .save())
+  --------------------------------------------------------
   workflow("NAME").processes().memory_above(500).summarize().save()
 
-Remote (requires: pip install serverkit[remote]):
+  Remote SSH
+  ----------
   connect HOST [--user U] [--key PATH] [--port N] [--password P]
-    [--timeout SEC] [--no-agent] [--no-look-for-keys]
+           [--timeout SEC] [--no-agent] [--no-look-for-keys]   # needs: pip install serverkit[remote]
   disconnect
 
-AI (optional: pip install serverkit[ai]; Ollama running, model in config ollama.model):
-  ask <question>               Natural language → SDK summary / diagnosis / workflow
+  AI (optional: pip install serverkit[ai]; Ollama + ollama.model in config)
+  -------------------------------------------------------------------------
+  ask <question>                Natural language → SDK (processes, logs, disk,
+                                ports, cron, env, memory, network, users, docker,
+                                services, systemctl), diagnose, or workflows
 
-Tab completion lists common SDK strings.
+  Tab completion lists common SDK strings.
 """
 
 
